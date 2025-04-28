@@ -150,12 +150,12 @@ Follow these detailed steps to set up the project on your local machine:
 8. **Access the API**
    
    The API will be available at:
-   - API: `https://localhost:5001/api` (HTTPS) or `http://localhost:5000/api` (HTTP)
-   - Swagger UI: `https://localhost:5001/swagger` or `http://localhost:5000/swagger`
+   - API: `http://localhost:5089/api/ProductPrices` (HTTP)
+   - Swagger UI: `http://localhost:5089/swagger/index.html`
 
 9. **Troubleshooting common issues**
    
-   - **Port conflict**: If ports 5000/5001 are already in use, you can specify a different port:
+   - **Port conflict**: If port 5089 are already in use, you can specify a different port:
      ```bash
      dotnet run --urls="https://localhost:5005"
      ```
