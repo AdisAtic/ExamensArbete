@@ -232,9 +232,19 @@ For detailed API documentation, refer to the Swagger UI when running the applica
 
 The API provides the following main endpoints:
 
-- **Products**: `/api/products` - Manage product information
-- **Prices**: `/api/prices` - Access historical price data
+- **Product Prices**:  
+`/api/productprices` – CRUD and special operations for price data  
+- `GET /api/productprices`  
+- `GET /api/productprices/{id}`  
+- `GET /api/productprices/lowest/{productId}` – Lowest price over the last 30 days  
+- `GET /api/productprices/latest/{productId}` – Most recently recorded price  
+- `POST /api/productprices`  
+- `PUT /api/productprices/{id}`  
+- `DELETE /api/productprices/{id}`  
+- `POST /api/productprices/refresh` – Manually trigger a price update
+
 - **Alerts**: `/api/alerts` - Configure price change notifications
+
 - **Sources**: `/api/sources` - Manage price data sources
 
 ## 🐳 Docker Configuration
