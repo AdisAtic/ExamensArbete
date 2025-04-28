@@ -18,13 +18,11 @@ A robust .NET 9.0 RESTful API for tracking and analyzing product price data from
 7. [API Endpoints](#api-endpoints)
 8. [Docker Configuration](#docker-configuration)
 9. [Configuration](#configuration)
-10. [Testing](#testing)
-11. [Deployment](#deployment)
-12. [Logging](#logging)
-13. [Contributing](#contributing)
-14. [Versioning](#versioning)
-15. [License](#license)
-16. [Contact](#contact)
+10. [Deployment](#deployment)
+11. [Logging](#logging)
+12. [Contributing](#contributing)
+13. [License](#license)
+14. [Contact](#contact)
 
 ---
 
@@ -291,18 +289,14 @@ The application uses standard .NET configuration patterns. Key settings can be f
 - **Serilog**: Structured logging configuration
 - **API Keys**: External service authentication (if applicable)
 
-## 🧪 Testing
+<!-- ## 🧪 Testing
 
-Run the automated tests for this system:
+Testing is planned but not yet implemented. This section will be updated when tests are available.
 
 ```bash
 dotnet test
 ```
-
-The test suite includes:
-- Unit tests
-- Integration tests
-- API endpoint tests
+-->
 
 ## 📦 Deployment
 
@@ -341,10 +335,6 @@ This project is maintained by [AdisAtic](https://github.com/AdisAtic).
 3. Commit your changes (`git commit -m 'Add some amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
-
-## 🔢 Versioning
-
-We use [SemVer](http://semver.org/) for versioning. For the versions available, see the [tags on this repository](https://github.com/AdisAtic/ExamensArbete/tags).
 
 ## 📄 License
 
