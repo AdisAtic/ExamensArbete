@@ -18,11 +18,10 @@ A robust .NET 9.0 RESTful API for tracking and analyzing product price data from
 7. [API Endpoints](#api-endpoints)
 8. [Docker Configuration](#docker-configuration)
 9. [Configuration](#configuration)
-10. [Deployment](#deployment)
-11. [Logging](#logging)
-12. [Contributing](#contributing)
-13. [License](#license)
-14. [Contact](#contact)
+10. [Logging](#logging)
+11. [Contributing](#contributing)
+12. [License](#license)
+13. [Contact](#contact)
 
 ---
 
@@ -297,25 +296,6 @@ Testing is planned but not yet implemented. This section will be updated when te
 dotnet test
 ```
 -->
-
-## 📦 Deployment
-
-### Production Deployment
-
-For production deployment, consider:
-
-1. Using a CI/CD pipeline
-2. Setting up environment-specific configurations
-3. Implementing a monitoring solution
-
-### Environment Variables
-
-Set the following environment variables for production:
-
-```
-ASPNETCORE_ENVIRONMENT=Production
-ConnectionStrings__DefaultConnection=[your-secure-connection-string]
-```
 
 ## 📝 Logging
 
