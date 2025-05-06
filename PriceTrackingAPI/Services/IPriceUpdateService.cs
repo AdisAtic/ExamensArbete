@@ -1,10 +1,13 @@
 using System.Threading;
 using System.Threading.Tasks;
 
-
-namespace PriceTrackingAPI.Services;
-
-public interface IPriceUpdateService
+namespace PriceTrackingAPI.Services
 {
-    Task UpdatePricesAsync(CancellationToken cancellationToken);
+    public interface IPriceUpdateService
+    {
+        /// <summary>
+        /// Kör prisuppdateringen asynkront.
+        /// </summary>
+        Task UpdatePricesAsync(CancellationToken cancellationToken);
+    }
 }

@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using PriceTrackingAPI.Configurations;
 using PriceTrackingAPI.Data;
 using PriceTrackingAPI.Services;
+using PriceTrackingAPI.Services.FeedParser;
 using Serilog;
 
 // Konfigurera Serilog globalt
@@ -37,12 +38,16 @@ try
         options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
     // --- Konfigurera LitiumSettings från appsettings.json ---
-    builder.Services.Configure<LitiumSettings>(builder.Configuration.GetSection("LitiumSettings"));
-    builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<LitiumSettings>>().Value);
+    builder.Services.Configure<PriceUpdateSettings>(builder.Configuration.GetSection("PriceUpdateSettings"));
+    builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<PriceUpdateSettings>>().Value);
 
     // --- Registrera HTTP-klient och din PriceUpdateService ---
     builder.Services.AddHttpClient();  // för att injicera HttpClient i PriceUpdateService
     builder.Services.AddScoped<IPriceUpdateService, PriceUpdateService>();
+    builder.Services.AddScoped<IProductPriceService, ProductPriceService>();
+    builder.Services.AddScoped<IFeedParser, FeedParser>();
+
+
 
     // --- Lägg till bakgrundstjänst om inte i Migrations-miljö ---
     if (!builder.Environment.IsEnvironment("Migration"))
