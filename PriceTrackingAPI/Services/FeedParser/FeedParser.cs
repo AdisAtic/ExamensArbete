@@ -1,4 +1,10 @@
+using System;
+using System.Collections.Generic;
 using System.Globalization;
+using System.Net.Http;
+using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Xml;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -8,61 +14,97 @@ namespace PriceTrackingAPI.Services.FeedParser
 {
     public class FeedParser : IFeedParser
     {
-        private readonly HttpClient _httpClient;
+        private readonly HttpClient _http;
+        private readonly PriceAgentOptions _agent;
         private readonly PriceUpdateSettings _settings;
         private readonly ILogger<FeedParser> _logger;
 
-        public FeedParser(HttpClient httpClient, IOptions<PriceUpdateSettings> options, ILogger<FeedParser> logger)
+        public FeedParser(
+            HttpClient httpClient,
+            IOptions<PriceAgentOptions> agentOpts,
+            IOptions<PriceUpdateSettings> updateOpts,
+            ILogger<FeedParser> logger)
         {
-            _httpClient = httpClient;
-            _settings = options.Value;
-            _logger = logger;
+            _http      = httpClient;
+            _agent     = agentOpts.Value;
+            _settings  = updateOpts.Value;
+            _logger    = logger;
         }
 
         public async Task<Dictionary<string, (decimal price, decimal? salePrice)>> ParseAsync(CancellationToken ct)
         {
-            var dict = new Dictionary<string, (decimal price, decimal? salePrice)>();
+            var result = new Dictionary<string, (decimal, decimal?)>();
 
-            var response = await _httpClient.GetAsync(_settings.FeedUrl, ct);
-            if (!response.IsSuccessStatusCode)
+            // Anropa rätt endpoint från ApiSettings:PriceAgent
+            var resp = await _http.GetAsync(_agent.FeedEndpoint, ct);
+            if (!resp.IsSuccessStatusCode)
             {
-                _logger.LogError("Misslyckades hämta feed: {Status}", response.StatusCode);
-                return dict;
+                _logger.LogError("Misslyckades hämta feed: {Status}", resp.StatusCode);
+                return result;
             }
 
-            var xml = await response.Content.ReadAsStringAsync();
-            var doc = new XmlDocument();
-            doc.LoadXml(xml);
+            var raw = await resp.Content.ReadAsStringAsync(ct);
+            var parserType = _settings.Parser.Type;
 
-            var products = doc.SelectNodes(_settings.ProductXPath);
-            if (products == null) return dict;
-
-            foreach (XmlNode product in products)
+            if (parserType.Equals("Xml", StringComparison.OrdinalIgnoreCase))
             {
-                var idNode = product.SelectSingleNode(_settings.IdXPath);
-                var priceNode = product.SelectSingleNode(_settings.PriceXPath);
-                var saleNode = product.SelectSingleNode(_settings.SalePriceXPath);
+                var doc = new XmlDocument();
+                doc.LoadXml(raw);
+                var cfg = _settings.Parser.Xml;
+                var products = doc.SelectNodes(cfg.ProductXPath);
+                if (products != null)
+                {
+                    foreach (XmlNode product in products)
+                    {
+                        var idNode    = product.SelectSingleNode(cfg.IdXPath);
+                        var priceNode = product.SelectSingleNode(cfg.PriceXPath);
+                        var saleNode  = product.SelectSingleNode(cfg.SalePriceXPath);
+                        if (idNode == null || priceNode == null) continue;
 
-                if (idNode == null || priceNode == null) continue;
+                        var id = idNode.InnerText.Trim();
+                        if (!decimal.TryParse(priceNode.InnerText, NumberStyles.Any, CultureInfo.InvariantCulture, out var price))
+                            continue;
 
-                var id = idNode.InnerText.Trim();
-                if (!decimal.TryParse(priceNode.InnerText, NumberStyles.Any, CultureInfo.InvariantCulture, out var price))
-                    continue;
+                        decimal? salePrice = null;
+                        if (saleNode != null && !string.IsNullOrWhiteSpace(saleNode.InnerText))
+                            salePrice = decimal.Parse(saleNode.InnerText.Split(' ')[0], CultureInfo.InvariantCulture);
 
-                decimal? salePrice = null;
-                if (saleNode != null && !string.IsNullOrWhiteSpace(saleNode.InnerText))
-                    salePrice = ParseAmount(saleNode.InnerText);
+                        result[id] = (price, salePrice);
+                    }
+                }
+            }
+            else if (parserType.Equals("Json", StringComparison.OrdinalIgnoreCase))
+            {
+                using var doc = JsonDocument.Parse(raw);
+                var config = _settings.Parser.Json;
+                // Exempel: antag att $.items är en array
+                if (doc.RootElement.TryGetProperty("items", out var items))
+                {
+                    foreach (var item in items.EnumerateArray())
+                    {
+                        if (!item.TryGetProperty(config.IdProperty, out var idProp)) continue;
+                        if (!item.TryGetProperty(config.PriceProperty, out var priceProp)) continue;
 
-                dict[id] = (price, salePrice);
+                        var id = idProp.GetString();
+                        var price = priceProp.GetDecimal();
+                        decimal? salePrice = null;
+                        if (item.TryGetProperty(config.SalePriceProperty, out var saleProp)
+                            && saleProp.ValueKind == JsonValueKind.Number)
+                        {
+                            salePrice = saleProp.GetDecimal();
+                        }
+
+                        if (!string.IsNullOrEmpty(id))
+                            result[id] = (price, salePrice);
+                    }
+                }
+            }
+            else
+            {
+                _logger.LogError("Okänt parser‐format: {Type}", parserType);
             }
 
-            return dict;
-        }
-
-        private decimal ParseAmount(string text)
-        {
-            var segments = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            return decimal.Parse(segments[0], CultureInfo.InvariantCulture);
+            return result;
         }
     }
 }

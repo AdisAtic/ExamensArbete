@@ -1,88 +1,123 @@
+// Program.cs
+using System;
+using System.Net.Http.Headers;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using PriceTrackingAPI;
 using PriceTrackingAPI.Configurations;
 using PriceTrackingAPI.Data;
 using PriceTrackingAPI.Services;
 using PriceTrackingAPI.Services.FeedParser;
 using Serilog;
 
-// Konfigurera Serilog globalt
-Log.Logger = new LoggerConfiguration()
-    .MinimumLevel.Debug()
-    .WriteTo.Console()
-    .WriteTo.File("logs/log-.txt", rollingInterval: RollingInterval.Day)
-    .CreateLogger();
+var builder = WebApplication.CreateBuilder(args);
 
-try
+// -----------------------------------------------------
+// Serilog - 
+// -----------------------------------------------------
+// Log.Logger = new LoggerConfiguration()
+//     .MinimumLevel.Debug()
+//     .WriteTo.Console()
+//     .WriteTo.File("logs/log-.txt", rollingInterval: RollingInterval.Day)
+//     .CreateLogger();
+// builder.Host.UseSerilog();
+
+// -----------------------------------------------------
+// CORS (för React Dev Server)
+// -----------------------------------------------------
+builder.Services.AddCors(o => o.AddPolicy("AllowReact", p =>
+    p.WithOrigins("http://localhost:5173")
+     .AllowAnyHeader()
+     .AllowAnyMethod()
+));
+
+// -----------------------------------------------------
+// Entity Framework / DbContext
+// -----------------------------------------------------
+builder.Services.AddDbContext<AppDbContext>(o =>
+    o.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// -----------------------------------------------------
+// Options‐binding + validering
+// -----------------------------------------------------
+// 1) PriceAgentOptions (API‐klient)
+//  builder.Services.Configure<PriceAgentOptions>(
+//      builder.Configuration.GetSection("ApiSettings:PriceAgent"));
+//  – kan valideras med DataAnnotations om du vill
+builder.Services.AddOptions<PriceAgentOptions>()
+    .Bind(builder.Configuration.GetSection("ApiSettings:PriceAgent"))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
+// 2) PriceUpdateSettings (schema för feed/parsing)
+builder.Services.AddPriceUpdateOptions(builder.Configuration);
+
+// 3) LitiumSettings (service‐account + schemaläggning)
+builder.Services.AddOptions<LitiumSettings>()
+    .Bind(builder.Configuration.GetSection("LitiumSettings"))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
+// -----------------------------------------------------
+// Typed HttpClient för din FeedParser
+// -----------------------------------------------------
+builder.Services.AddHttpClient<IFeedParser, FeedParser>((sp, client) =>
 {
-    Log.Information("Application is starting...");
+    var opts = sp.GetRequiredService<IOptions<PriceAgentOptions>>().Value;
+    client.BaseAddress = new Uri(opts.BaseUrl);
 
-    var builder = WebApplication.CreateBuilder(args);
-
-    // --- Konfigurera host-URLs (valfritt, om du vill styra portar) ---
-    // builder.WebHost.UseUrls("http://localhost:5089", "https://localhost:7047");
-
-    // --- Lägg till CORS-tjänst för React ---
-    builder.Services.AddCors(options =>
+    var auth = opts.Authentication;
+    switch (auth.Method)
     {
-        options.AddPolicy("AllowReact", policy =>
-            policy
-                .WithOrigins("http://localhost:5173")  // React-dev-server
-                .AllowAnyHeader()
-                .AllowAnyMethod()
-        );
-    });
+        case AuthenticationMethod.Basic:
+            var cred = Convert.ToBase64String(
+                Encoding.ASCII.GetBytes($"{auth.Username}:{auth.Password}"));
+            client.DefaultRequestHeaders.Authorization =
+                new AuthenticationHeaderValue("Basic", cred);
+            break;
 
-    // --- Konfigurera DbContext (PostgreSQL) ---
-    builder.Services.AddDbContext<AppDbContext>(options =>
-        options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+        case AuthenticationMethod.Bearer:
+        case AuthenticationMethod.ServiceAccount:
+            client.DefaultRequestHeaders.Authorization =
+                new AuthenticationHeaderValue("Bearer", auth.Token!);
+            break;
 
-    // --- Konfigurera LitiumSettings från appsettings.json ---
-    builder.Services.Configure<PriceUpdateSettings>(builder.Configuration.GetSection("PriceUpdateSettings"));
-    builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<PriceUpdateSettings>>().Value);
-
-    // --- Registrera HTTP-klient och din PriceUpdateService ---
-    builder.Services.AddHttpClient();  // för att injicera HttpClient i PriceUpdateService
-    builder.Services.AddScoped<IPriceUpdateService, PriceUpdateService>();
-    builder.Services.AddScoped<IProductPriceService, ProductPriceService>();
-    builder.Services.AddScoped<IFeedParser, FeedParser>();
-
-
-
-    // --- Lägg till bakgrundstjänst om inte i Migrations-miljö ---
-    if (!builder.Environment.IsEnvironment("Migration"))
-    {
-        builder.Services.AddHostedService<LitiumPriceUpdaterService>();
+        case AuthenticationMethod.ClientCredentials:
+            // TODO: lägg in din DelegatingHandler för ClientCredentials
+            break;
     }
+});
 
-    // --- Controllers + Swagger ---
-    builder.Services.AddControllers();
-    builder.Services.AddEndpointsApiExplorer();
-    builder.Services.AddSwaggerGen();
+// -----------------------------------------------------
+// Applikationstjänster
+// -----------------------------------------------------
+builder.Services.AddScoped<IPriceUpdateService, PriceUpdateService>();
+builder.Services.AddScoped<IProductPriceService, ProductPriceService>();
+if (!builder.Environment.IsEnvironment("Migration"))
+    builder.Services.AddHostedService<LitiumPriceUpdaterService>();
 
-    var app = builder.Build();
+// -----------------------------------------------------
+// Controllers & Swagger
+// -----------------------------------------------------
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
 
-    // --- Middleware ---
-    if (app.Environment.IsDevelopment())
-    {
-        app.UseSwagger();
-        app.UseSwaggerUI();
-    }
+var app = builder.Build();
 
-    // --- Aktivera CORS-policyn tidigt i pipelinen ---
-    app.UseCors("AllowReact");
-
-    app.UseHttpsRedirection();
-    app.UseAuthorization();
-    app.MapControllers();
-
-    app.Run();
-}
-catch (Exception ex)
+// -----------------------------------------------------
+// Middleware‐pipeline
+// -----------------------------------------------------
+if (app.Environment.IsDevelopment())
 {
-    Log.Fatal(ex, "Application failed to start!");
+    app.UseSwagger();
+    app.UseSwaggerUI();
 }
-finally
-{
-    Log.CloseAndFlush();
-}
+
+app.UseCors("AllowReact");
+app.UseHttpsRedirection();
+app.UseAuthorization();
+app.MapControllers();
+
+app.Run();
