@@ -30,7 +30,7 @@ namespace PriceTrackingAPI.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<decimal>("LowestPriceLast30Days")
+                    b.Property<decimal>("Price")
                         .HasColumnType("numeric");
 
                     b.Property<string>("ProductId")
